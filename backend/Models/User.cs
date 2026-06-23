@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace backend.Backend.Models
+namespace backend.Models
 {
     public class User
     {

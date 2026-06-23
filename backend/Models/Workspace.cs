@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 
-namespace backend.Backend.Models
+namespace backend.Models
 {
     public class Workspace
     {
