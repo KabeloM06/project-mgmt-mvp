@@ -1,11 +1,12 @@
 using Microsoft.Azure.Cosmos;
 using backend.Interfaces;
 using backend.Infrastructure.Repositories;
+using backend.Services; // 1. Added namespace for our new service layer
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ============================================================================
-// 1. AZURE COSMOS DB & REPOSITORY INJECTION SETTINGS
+// AZURE COSMOS DB & REPOSITORY INJECTION SETTINGS
 // ============================================================================
 var cosmosSection = builder.Configuration.GetSection("CosmosDb");
 string endpointUrl = cosmosSection["EndpointUrl"] ?? throw new InvalidOperationException("Cosmos EndpointUrl is missing.");
@@ -13,7 +14,6 @@ string primaryKey = cosmosSection["PrimaryKey"] ?? throw new InvalidOperationExc
 string databaseName = cosmosSection["DatabaseName"] ?? throw new InvalidOperationException("Cosmos DatabaseName is missing.");
 string containerName = cosmosSection["ContainerName"] ?? throw new InvalidOperationException("Cosmos ContainerName is missing.");
 
-// Instantiate and register the CosmosClient as a Singleton to prevent socket exhaustion
 var cosmosClient = new CosmosClient(endpointUrl, primaryKey, new CosmosClientOptions
 {
     SerializerOptions = new CosmosSerializationOptions
@@ -23,13 +23,17 @@ var cosmosClient = new CosmosClient(endpointUrl, primaryKey, new CosmosClientOpt
 });
 builder.Services.AddSingleton(cosmosClient);
 
-// Register your TaskRepository interface and implementation
 builder.Services.AddScoped<ITaskRepository>(sp => 
     new TaskRepository(cosmosClient, databaseName, containerName));
+
 // ============================================================================
+// DAY 3 PERFORMANCE & CACHING SERVICES
+// ============================================================================
+builder.Services.AddMemoryCache(); // 2. Activates standard in-memory caching
+builder.Services.AddScoped<WorkspaceService>(); // 3. Registers our Cache-Aside orchestration tier
 
 // Add services to the container.
-builder.Services.AddControllers(); // Essential for routing requests to Day 3 Controllers
+builder.Services.AddControllers(); 
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -45,9 +49,7 @@ app.UseHttpsRedirection();
 // Maps attribute-routed API controllers automatically
 app.MapControllers();
 
-// ============================================================================
-// Boilerplate Weather Endpoint (Kept so you can verify local app runs safely)
-// ============================================================================
+// Boilerplate Weather Endpoint
 var summaries = new[]
 {
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
