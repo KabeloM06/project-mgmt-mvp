@@ -1,0 +1,43 @@
+<div class="kanban-board-canvas">
+  @if (workspaceId) {
+    <div class="kanban-columns-container">
+      @for (status of columns; track status) {
+        <div class="kanban-column">
+          <div class="column-header">
+            <h4>📌 {{ status }}</h4>
+            <span class="task-counter-badge">{{ getTasksByStatus(status).length }}</span>
+          </div>
+
+          <div class="task-cards-wrapper">
+            @for (task of getTasksByStatus(status); track task.id) {
+              <div class="kanban-task-card">
+                <h5 class="task-title">{{ task.title }}</h5>
+                <p class="task-assignee">👤 {{ task.assignedTo || 'Unassigned' }}</p>
+                
+                @if (task.tags && task.tags.length > 0) {
+                  <div class="task-tags-row">
+                    @for (tag of task.tags; track tag) {
+                      <span class="task-tag-badge">{{ tag }}</span>
+                    }
+                  </div>
+                }
+              </div>
+            } @empty {
+              <div class="empty-column-placeholder">
+                <p>No tasks in this stage.</p>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="board-no-selection-state">
+      <div class="placeholder-message-box">
+        <span class="placeholder-icon">🚀</span>
+        <h3>Welcome to your Workspace Dashboard</h3>
+        <p>Select an active workspace from the sidebar menu to view your project board.</p>
+      </div>
+    </div>
+  }
+</div>
