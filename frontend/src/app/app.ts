@@ -1,12 +1,27 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { WorkspaceSidebarComponent } from './components/workspace-sidebar/workspace-sidebar';
+import { KanbanBoardComponent } from './components/kanban-board/kanban-board';
+import { Workspace } from './models/project.models';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  standalone: true,
+  imports: [
+    CommonModule, 
+    WorkspaceSidebarComponent, 
+    KanbanBoardComponent       
+  ],
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrls: ['./app.css']
 })
-export class App {
-  protected readonly title = signal('frontend');
+export class AppComponent {
+  title = 'project-management-mvp';
+  
+  // Holds the unified state context shared across our frontend UI slices
+  activeWorkspace: Workspace | null = null;
+
+  handleWorkspaceSelection(workspace: Workspace): void {
+    this.activeWorkspace = workspace;
+  }
 }
