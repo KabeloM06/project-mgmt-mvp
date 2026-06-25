@@ -70,5 +70,27 @@ namespace backend.Infrastructure.Repositories
         {
             await _container.CreateItemAsync(workspace, new PartitionKey(workspace.WorkspaceId));
         }
+
+        // 4. Cross-Partition Query (Used to populate the frontend sidebar selection roster)
+        // 🔥 NEW FOR DAY 4: Bypasses explicit PartitionKey constraints to scan type attributes
+        public async Task<IEnumerable<Workspace>> GetAllWorkspacesAsync()
+        {
+            var sqlQueryText = "SELECT * FROM c WHERE c.type = 'workspace'";
+            var queryDefinition = new QueryDefinition(sqlQueryText);
+
+            // Omitting requestOptions executes this globally across all logical partitions
+            using FeedIterator<Workspace> feedIterator = _container.GetItemQueryIterator<Workspace>(
+                queryDefinition
+            );
+
+            var results = new List<Workspace>();
+            while (feedIterator.HasMoreResults)
+            {
+                FeedResponse<Workspace> response = await feedIterator.ReadNextAsync();
+                results.AddRange(response);
+            }
+
+            return results;
+        }
     }
 }
