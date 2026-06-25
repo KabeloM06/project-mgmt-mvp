@@ -1,0 +1,21 @@
+<div class="sidebar-container">
+  <div class="sidebar-header">
+    <h3>💼 Workspaces</h3>
+  </div>
+  
+  <ul class="workspace-navigation-list">
+    @for (ws of workspaces; track ws.workspaceId) {
+      <li 
+        (click)="selectWorkspace(ws)" 
+        [class.active]="ws.workspaceId === activeWorkspaceId"
+        class="workspace-nav-item">
+        <span class="workspace-icon">📁</span>
+        <span class="workspace-name">{{ ws.name }}</span>
+      </li>
+    } @empty {
+      <li class="sidebar-empty-state">
+        <p>No active workspaces found.</p>
+      </li>
+    }
+  </ul>
+</div>
