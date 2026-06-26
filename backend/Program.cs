@@ -1,20 +1,33 @@
 using Microsoft.Azure.Cosmos;
+using Azure.Storage.Blobs;
+using Azure.Identity;                  // Added for Day 6 Passwordless Identity
+using Azure.Security.KeyVault.Secrets; // Added for Day 6 Secret Management
 using backend.Interfaces;
 using backend.Infrastructure.Repositories;
-using backend.Services; // 1. Added namespace for our new service layer
+using backend.Services; 
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ============================================================================
-// AZURE COSMOS DB & REPOSITORY INJECTION SETTINGS
+// DAY 6 IDENTITY & CREDENTIAL BOOTSTRAPPING
+// ============================================================================
+// DefaultAzureCredential automatically manages local CLI tokens or production Managed Identities
+var credentialOptions = new DefaultAzureCredentialOptions
+{
+    ManagedIdentityClientId = builder.Configuration["ManagedIdentityClientId"]
+};
+var azureCredential = new DefaultAzureCredential(credentialOptions);
+
+// ============================================================================
+// AZURE COSMOS DB & REPOSITORY INJECTION SETTINGS (PASSWORDLESS REFACTOR)
 // ============================================================================
 var cosmosSection = builder.Configuration.GetSection("CosmosDb");
 string endpointUrl = cosmosSection["EndpointUrl"] ?? throw new InvalidOperationException("Cosmos EndpointUrl is missing.");
-string primaryKey = cosmosSection["PrimaryKey"] ?? throw new InvalidOperationException("Cosmos PrimaryKey is missing.");
 string databaseName = cosmosSection["DatabaseName"] ?? throw new InvalidOperationException("Cosmos DatabaseName is missing.");
 string containerName = cosmosSection["ContainerName"] ?? throw new InvalidOperationException("Cosmos ContainerName is missing.");
 
-var cosmosClient = new CosmosClient(endpointUrl, primaryKey, new CosmosClientOptions
+// Replaced legacy 'primaryKey' authentication with token-based 'azureCredential'
+var cosmosClient = new CosmosClient(endpointUrl, azureCredential, new CosmosClientOptions
 {
     SerializerOptions = new CosmosSerializationOptions
     {
@@ -27,10 +40,32 @@ builder.Services.AddScoped<ITaskRepository>(sp =>
     new TaskRepository(cosmosClient, databaseName, containerName));
 
 // ============================================================================
+// DAY 6 ADDITIONAL AZURE SDK CLIENT REGISTRATIONS
+// ============================================================================
+
+// Blob Storage Client Registration
+builder.Services.AddSingleton(sp =>
+{
+    var blobEndpoint = builder.Configuration["Storage:BlobEndpoint"]
+        ?? throw new InvalidOperationException("Storage:BlobEndpoint is missing from configuration.");
+        
+    return new BlobServiceClient(new Uri(blobEndpoint), azureCredential);
+});
+
+// Key Vault Secret Client Registration
+builder.Services.AddSingleton(sp =>
+{
+    var keyVaultUrl = builder.Configuration["KeyVault:Url"]
+        ?? throw new InvalidOperationException("KeyVault:Url is missing from configuration.");
+        
+    return new SecretClient(new Uri(keyVaultUrl), azureCredential);
+});
+
+// ============================================================================
 // DAY 3 PERFORMANCE & CACHING SERVICES
 // ============================================================================
-builder.Services.AddMemoryCache(); // 2. Activates standard in-memory caching
-builder.Services.AddScoped<WorkspaceService>(); // 3. Registers our Cache-Aside orchestration tier
+builder.Services.AddMemoryCache(); 
+builder.Services.AddScoped<WorkspaceService>(); 
 
 // Add services to the container.
 builder.Services.AddControllers(); 
