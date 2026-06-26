@@ -61,6 +61,9 @@ builder.Services.AddSingleton(sp =>
     return new SecretClient(new Uri(keyVaultUrl), azureCredential);
 });
 
+// register your secure config wrapper:
+builder.Services.AddSingleton<JwtConfig>();
+
 // ============================================================================
 // DAY 3 PERFORMANCE & CACHING SERVICES
 // ============================================================================
