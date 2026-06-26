@@ -20,10 +20,19 @@ param cosmosDbName string = 'project-mgmt-cosmos-${uniqueString(resourceGroup().
 param keyVaultName string = 'projmgmtvault-${uniqueString(resourceGroup().id)}'
 
 // ==========================================
+// SECURITY IDENTITIES (ENTRA ID / SECURITY FIRST)
+// ==========================================
+
+// 1. User-Assigned Managed Identity: Provides passwordless credentials for our applications
+resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'proj-mgmt-identity'
+  location: location
+}
+
+// ==========================================
 // COMPUTE LAYER COMPONENT DECLARATIONS
 // ==========================================
 
-// 1. App Service Plan: F1 Free Tier compute for our Frontend API App Service hosting environment
 resource appServicePlan 'Microsoft.Web/serverfarms@2022-03-01' = {
   name: 'proj-mgmt-free-plan'
   location: location
@@ -33,7 +42,6 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-03-01' = {
   }
 }
 
-// 2. Function App Plan: Y1 Consumption (Dynamic Serverless) hosting engine for the back-office scheduler
 resource functionAppPlan 'Microsoft.Web/serverfarms@2022-03-01' = {
   name: 'proj-mgmt-consumption-plan'
   location: location
@@ -47,26 +55,36 @@ resource functionAppPlan 'Microsoft.Web/serverfarms@2022-03-01' = {
 // HOSTING RUNTIMES & WEB APP TARGETS
 // ==========================================
 
-// 3. API Web App: Hosts our Core .NET 9 API proxy layer
 resource appService 'Microsoft.Web/sites@2022-03-01' = {
   name: appServiceName
   location: location
   kind: 'app'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${identity.id}': {} // Assigns our Managed Identity to the API
+    }
+  }
   properties: {
-    serverFarmId: appServicePlan.id // Links directly to the compute plan from Commit 1
+    serverFarmId: appServicePlan.id
     siteConfig: {
-      netFrameworkVersion: 'v9.0' // Explicitly sets the engine to .NET 9
+      netFrameworkVersion: 'v9.0'
     }
   }
 }
 
-// 4. Background Function App: Hosts the serverless queue handlers
 resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
   name: functionAppName
   location: location
   kind: 'functionapp'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${identity.id}': {} // 🔥 Assigns our Managed Identity to the Worker
+    }
+  }
   properties: {
-    serverFarmId: functionAppPlan.id // Links to the Consumption plan from Commit 1
+    serverFarmId: functionAppPlan.id
   }
 }
 
@@ -74,12 +92,11 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
 // DATA ACCOUNTS & STORAGE UNDERPINNINGS
 // ==========================================
 
-// 5. Storage Account: Handles the background system blobs, queues, and metadata
 resource storage 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   name: storageName
   location: location
   sku: {
-    name: 'Standard_LRS' // Lowest cost, locally redundant replication tier
+    name: 'Standard_LRS'
   }
   kind: 'StorageV2'
   properties: {
@@ -88,11 +105,6 @@ resource storage 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   }
 }
 
-// ==========================================
-// PERSISTENCE & SECURITY VAULT TIERS
-// ==========================================
-
-// 6. Cosmos DB Account: Direct NoSQL data persistence layer
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
   name: cosmosDbName
   location: location
@@ -109,7 +121,6 @@ resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2023-04-15' = {
   }
 }
 
-// 7. Azure Key Vault: Centralized secret management repository
 resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' = {
   name: keyVaultName
   location: location
@@ -119,9 +130,25 @@ resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' = {
       name: 'standard'
       family: 'A'
     }
-    accessPolicies: [] // Left blank intentionally; we will configure secure access shortly
+    accessPolicies: []
     enabledForDeployment: false
     enabledForDiskEncryption: false
     enabledForTemplateDeployment: false
+  }
+}
+
+// ==========================================
+// RBAC ROLE ASSIGNMENTS (ACCESS CONTROL)
+// ==========================================
+
+// 2. Role Assignment: Grants our Managed Identity "Storage Blob Data Contributor" access to the Storage Account
+resource roleAssignmentBlob 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storage.id, 'blobContributor', identity.id)
+  scope: storage
+  properties: {
+    // Built-in Azure GUID for Storage Blob Data Contributor role
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
   }
 }
