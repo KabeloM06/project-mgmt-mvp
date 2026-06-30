@@ -8,7 +8,7 @@ import { Workspace } from '../../models/project.models';
   standalone: true,
   imports: [CommonModule],
   templateUrl: './workspace-sidebar.html',
-  styleUrls: ['./workspace-sidebar.css']
+  styleUrls: ['./workspace-sidebar.scss']
 })
 export class WorkspaceSidebarComponent implements OnInit {
   workspaces: Workspace[] = [];

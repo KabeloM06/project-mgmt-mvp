@@ -10,10 +10,11 @@ import { Workspace } from './models/project.models';
   imports: [
     CommonModule, 
     WorkspaceSidebarComponent, 
-    KanbanBoardComponent       
+    KanbanBoardComponent,
+           
   ],
   templateUrl: './app.html',
-  styleUrls: ['./app.css']
+  styleUrls: ['./app.scss']
 })
 export class AppComponent {
   title = 'project-management-mvp';

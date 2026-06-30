@@ -8,7 +8,7 @@ import { TaskItem } from '../../models/project.models';
   standalone: true,
   imports: [CommonModule],
   templateUrl: './kanban-board.html',
-  styleUrls: ['./kanban-board.css']
+  styleUrls: ['./kanban-board.scss']
 })
 export class KanbanBoardComponent implements OnChanges {
   // Receives the partition context directly down-stream from the main layout shell

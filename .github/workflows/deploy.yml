@@ -1,0 +1,77 @@
+name: Build and Deploy Core Infrastructure
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK Runtime
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24' # 👈 Fixed to prevent Angular CLI version gate errors
+
+      - name: Compile & Publish Backend
+        working-directory: backend
+        run: dotnet publish -c Release -o ./publish
+
+      - name: Install & Build Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload Compiled Backend Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-publish
+          path: backend/publish
+
+      - name: Upload Compiled Frontend Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-publish
+          path: frontend/dist/frontend
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Backend Workspace
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-publish
+          path: ./backend_publish
+
+      - name: Download Frontend Workspace
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-publish
+          path: ./frontend_publish
+
+      - name: Authenticate to Azure via OpenID Connect / Service Principal
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy API to App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'project-mgmt-api-gyvhzwhlex23g'
+          package: './backend_publish'
+
+      - name: Deploy Frontend to App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'project-mgmt-frontend-gyvhzwhlex23g'
+          package: './frontend_publish'
