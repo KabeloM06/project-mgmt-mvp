@@ -73,6 +73,20 @@ resource appService 'Microsoft.Web/sites@2022-03-01' = {
   }
 }
 
+// RECONCILED FRONTEND APP SERVICE (DAY 7 DRIFT FIX)
+// Maps your live frontend slot into our IaC paradigm on the shared Free App Service Plan
+resource frontendApp 'Microsoft.Web/sites@2022-03-01' = {
+  name: 'project-mgmt-frontend-gyvhzwhlex23g'
+  location: location
+  kind: 'app'
+  properties: {
+    serverFarmId: appServicePlan.id
+    siteConfig: {
+      netFrameworkVersion: 'v6.0' 
+    }
+  }
+}
+
 resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
   name: functionAppName
   location: location
@@ -102,6 +116,30 @@ resource storage 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   properties: {
     supportsHttpsTrafficOnly: true
     minimumTlsVersion: 'TLS1_2'
+  }
+}
+
+// RECONCILED DAY 8 STORAGE QUEUE & PRIVATE CONTAINER DECLARATIONS
+resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2022-09-01' = {
+  parent: storage
+  name: 'default'
+}
+
+resource exportsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2022-09-01' = {
+  parent: queueService
+  name: 'exports'
+}
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2022-09-01' = {
+  parent: storage
+  name: 'default'
+}
+
+resource exportsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2022-09-01' = {
+  parent: blobService
+  name: 'exports'
+  properties: {
+    publicAccess: 'None' // Locks down data privacy compliance
   }
 }
 
