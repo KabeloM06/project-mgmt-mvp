@@ -25,6 +25,11 @@ jobs:
         working-directory: backend
         run: dotnet publish -c Release -o ./publish
 
+      # NEW: Compile & Publish Azure Function Background Worker (Day 8 Prep)
+      - name: Compile & Publish Function Worker
+        working-directory: function-app
+        run: dotnet publish -c Release -o ./publish
+
       - name: Install & Build Frontend
         working-directory: frontend
         run: |
@@ -36,6 +41,13 @@ jobs:
         with:
           name: backend-publish
           path: backend/publish
+
+      # NEW: Archive and upload the Function App binaries
+      - name: Upload Compiled Function Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: function-publish
+          path: function-app/publish
 
       - name: Upload Compiled Frontend Artifacts
         uses: actions/upload-artifact@v4
@@ -53,6 +65,13 @@ jobs:
           name: backend-publish
           path: ./backend_publish
 
+      # NEW: Fetch compiled Function binaries from the build runner
+      - name: Download Function Workspace
+        uses: actions/download-artifact@v4
+        with:
+          name: function-publish
+          path: ./function_publish
+
       - name: Download Frontend Workspace
         uses: actions/download-artifact@v4
         with:
@@ -69,6 +88,13 @@ jobs:
         with:
           app-name: 'project-mgmt-api-gyvhzwhlex23g'
           package: './backend_publish'
+
+      # NEW: Securely deploy the Background Worker to the consumption Azure Function App
+      - name: Deploy Worker to Azure Function App
+        uses: azure/functions-action@v1
+        with:
+          app-name: 'project-mgmt-worker-gyvhzwhlex23g'
+          package: './function_publish'
 
       - name: Deploy Frontend to App Service
         uses: azure/webapps-deploy@v2
