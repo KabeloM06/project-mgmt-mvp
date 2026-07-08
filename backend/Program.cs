@@ -1,7 +1,7 @@
 using Microsoft.Azure.Cosmos;
 using Azure.Storage.Blobs;
-using Azure.Identity;                  // Added for Day 6 Passwordless Identity
-using Azure.Security.KeyVault.Secrets; // Added for Day 6 Secret Management
+using Azure.Identity;                  
+using Azure.Security.KeyVault.Secrets; 
 using backend.Interfaces;
 using backend.Infrastructure.Repositories;
 using backend.Services; 
@@ -65,6 +65,19 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<JwtConfig>();
 
 // ============================================================================
+// DAY 7.5 PRODUCTION CORS POLICY REGISTRATION
+// ============================================================================
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowProductionFrontend", policy =>
+    {
+        policy.WithOrigins("https://project-mgmt-frontend-gyvhzwhlex23g.azurewebsites.net")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+// ============================================================================
 // DAY 3 PERFORMANCE & CACHING SERVICES
 // ============================================================================
 builder.Services.AddMemoryCache(); 
@@ -83,6 +96,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// ============================================================================
+// DAY 7.5 ENFORCE CORS MIDDLEWARE
+// ============================================================================
+// This must sit BEFORE MapControllers so preflight OPTIONS requests are handled
+app.UseCors("AllowProductionFrontend");
 
 // Maps attribute-routed API controllers automatically
 app.MapControllers();
