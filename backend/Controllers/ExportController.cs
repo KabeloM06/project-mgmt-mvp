@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Threading.Tasks;
+using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
+using Azure.Storage.Queues; // For the queue producer
 using backend.Infrastructure.Repositories;
 using backend.Models;
 
@@ -15,11 +18,16 @@ public class ExportController : ControllerBase
 {
     private readonly IExportRepository _exportRepository;
     private readonly BlobServiceClient _blobServiceClient;
+    private readonly IConfiguration _configuration;
 
-    public ExportController(IExportRepository exportRepository, BlobServiceClient blobServiceClient)
+    public ExportController(
+        IExportRepository exportRepository, 
+        BlobServiceClient blobServiceClient,
+        IConfiguration configuration)
     {
         _exportRepository = exportRepository;
         _blobServiceClient = blobServiceClient;
+        _configuration = configuration;
     }
 
     [HttpPost("request/{workspaceId}")]
@@ -33,8 +41,28 @@ public class ExportController : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
 
+        // 1. Save the job entry directly into your Always-Free Cosmos DB container
         await _exportRepository.CreateExportJobAsync(job);
         
+        // 2. Push message to the background processing queue
+        try
+        {
+            string connectionString = _configuration["AzureStorage:ConnectionString"];
+            string queueName = _configuration["AzureStorage:QueueName"];
+            
+            QueueClient queueClient = new QueueClient(connectionString, queueName);
+            await queueClient.CreateIfNotExistsAsync();
+
+            var payload = new { JobId = job.Id, WorkspaceId = job.WorkspaceId };
+            string messageText = JsonSerializer.Serialize(payload);
+
+            await queueClient.SendMessageAsync(messageText);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Job tracked in Cosmos DB, but background queueing failed: {ex.Message}");
+        }
+
         return Accepted(job); 
     }
 
