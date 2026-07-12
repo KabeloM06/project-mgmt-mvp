@@ -4,6 +4,10 @@ on:
   push:
     branches: [ master ]
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,13 +23,12 @@ jobs:
       - name: Setup Node.js Environment
         uses: actions/setup-node@v4
         with:
-          node-version: '24' # 👈 Fixed to prevent Angular CLI version gate errors
+          node-version: '24' 
 
       - name: Compile & Publish Backend
         working-directory: backend
         run: dotnet publish -c Release -o ./publish
 
-      # NEW: Compile & Publish Azure Function Background Worker (Day 8 Prep)
       - name: Compile & Publish Function Worker
         working-directory: function-app
         run: dotnet publish -c Release -o ./publish
@@ -42,7 +45,6 @@ jobs:
           name: backend-publish
           path: backend/publish
 
-      # NEW: Archive and upload the Function App binaries
       - name: Upload Compiled Function Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -59,13 +61,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # We need the checkout step here too so the runner can read the main.bicep file!
+      - name: Checkout Repository Configuration
+        uses: actions/checkout@v4
+
       - name: Download Backend Workspace
         uses: actions/download-artifact@v4
         with:
           name: backend-publish
           path: ./backend_publish
 
-      # NEW: Fetch compiled Function binaries from the build runner
       - name: Download Function Workspace
         uses: actions/download-artifact@v4
         with:
@@ -83,13 +88,26 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # ==========================================
+      # 🚀 IAC INFRASTRUCTURE ENFORCEMENT STEP
+      # ==========================================
+      - name: Provision & Sync Azure Infrastructure via Bicep
+        uses: azure/arm-deploy@v2
+        with:
+          subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          template: ./main.bicep  # 👈 Adjust path if main.bicep is inside an 'infra' subfolder
+          failOnTargetValidationError: true
+
+      # ==========================================
+      # CODE DEPLOYMENTS
+      # ==========================================
       - name: Deploy API to App Service
         uses: azure/webapps-deploy@v2
         with:
           app-name: 'project-mgmt-api-gyvhzwhlex23g'
           package: './backend_publish'
 
-      # NEW: Securely deploy the Background Worker to the consumption Azure Function App
       - name: Deploy Worker to Azure Function App
         uses: azure/functions-action@v1
         with:

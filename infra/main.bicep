@@ -69,12 +69,25 @@ resource appService 'Microsoft.Web/sites@2022-03-01' = {
     serverFarmId: appServicePlan.id
     siteConfig: {
       netFrameworkVersion: 'v9.0'
+      appSettings: [
+        {
+          name: 'CosmosDb__EndpointUrl'
+          value: cosmosDb.properties.documentEndpoint
+        }
+        {
+          name: 'AzureStorage__ConnectionString__queueServiceUri'
+          value: 'https://${storage.name}.queue.core.windows.net/'
+        }
+        {
+          name: 'AzureStorage__QueueName'
+          value: 'exports'
+        }
+      ]
     }
   }
 }
 
 // RECONCILED FRONTEND APP SERVICE (DAY 7 DRIFT FIX)
-// Maps your live frontend slot into our IaC paradigm on the shared Free App Service Plan
 resource frontendApp 'Microsoft.Web/sites@2022-03-01' = {
   name: 'project-mgmt-frontend-gyvhzwhlex23g'
   location: location
@@ -87,6 +100,7 @@ resource frontendApp 'Microsoft.Web/sites@2022-03-01' = {
   }
 }
 
+// UPDATED FUNCTION APP WORKER CONFIGURATION
 resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
   name: functionAppName
   location: location
@@ -99,6 +113,32 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
   }
   properties: {
     serverFarmId: functionAppPlan.id
+    siteConfig: {
+      netFrameworkVersion: 'v9.0'
+      appSettings: [
+        {
+          name: 'FUNCTIONS_WORKER_RUNTIME'
+          value: 'dotnet-isolated'
+        }
+        {
+          name: 'FUNCTIONS_EXTENSION_VERSION'
+          value: '~4'
+        }
+        {
+          name: 'CosmosDb__EndpointUrl'
+          value: cosmosDb.properties.documentEndpoint
+        }
+        {
+          // Passwordless connection structure using Identity for WebJobs
+          name: 'AzureStorage__queueServiceUri'
+          value: 'https://${storage.name}.queue.core.windows.net/'
+        }
+        {
+          name: 'AzureStorage__blobServiceUri'
+          value: 'https://${storage.name}.blob.core.windows.net/'
+        }
+      ]
+    }
   }
 }
 
@@ -119,7 +159,6 @@ resource storage 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   }
 }
 
-// RECONCILED DAY 8 STORAGE QUEUE & PRIVATE CONTAINER DECLARATIONS
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2022-09-01' = {
   parent: storage
   name: 'default'
@@ -139,7 +178,7 @@ resource exportsContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
   parent: blobService
   name: 'exports'
   properties: {
-    publicAccess: 'None' // Locks down data privacy compliance
+    publicAccess: 'None'
   }
 }
 
@@ -179,13 +218,23 @@ resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' = {
 // RBAC ROLE ASSIGNMENTS (ACCESS CONTROL)
 // ==========================================
 
-// 2. Role Assignment: Grants our Managed Identity "Storage Blob Data Contributor" access to the Storage Account
+// Grants our Managed Identity "Storage Blob Data Contributor" access to the Storage Account
 resource roleAssignmentBlob 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storage.id, 'blobContributor', identity.id)
   scope: storage
   properties: {
-    // Built-in Azure GUID for Storage Blob Data Contributor role
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ADDED: Grants our Managed Identity "Storage Queue Data Processor" access to read/write from queues
+resource roleAssignmentQueue 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storage.id, 'queueProcessor', identity.id)
+  scope: storage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8a0f0c01-4e99-434c-9d83-18e3d0141c7b')
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
   }
