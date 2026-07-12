@@ -61,6 +61,18 @@ builder.Services.AddSingleton(sp =>
     return new SecretClient(new Uri(keyVaultUrl), azureCredential);
 });
 
+// ============================================================================
+// DAY 8 AZURE STORAGE QUEUE CLIENT REGISTRATION (PASSWORDLESS)
+// ============================================================================
+builder.Services.AddSingleton<Azure.Storage.Queues.QueueClient>(sp =>
+{
+    var queueEndpoint = builder.Configuration["Storage:QueueEndpoint"]
+        ?? throw new InvalidOperationException("Storage:QueueEndpoint is missing from configuration.");
+    
+    // Connects securely using our existing passwordless credential instance
+    return new Azure.Storage.Queues.QueueClient(new Uri($"{queueEndpoint}exports"), azureCredential);
+});
+
 // register your secure config wrapper:
 builder.Services.AddSingleton<JwtConfig>();
 
@@ -82,6 +94,11 @@ builder.Services.AddCors(options =>
 // ============================================================================
 builder.Services.AddMemoryCache(); 
 builder.Services.AddScoped<WorkspaceService>(); 
+
+// ============================================================================
+// DAY 8 REPOSITORY REGISTRATION
+// ============================================================================
+builder.Services.AddScoped<IExportRepository, ExportRepository>();
 
 // Add services to the container.
 builder.Services.AddControllers(); 
