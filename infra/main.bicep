@@ -19,6 +19,12 @@ param cosmosDbName string = 'project-mgmt-cosmos-${uniqueString(resourceGroup().
 @description('Azure Key Vault instance proxy name allocation.')
 param keyVaultName string = 'projmgmtvault-${uniqueString(resourceGroup().id)}'
 
+@description('Globally unique name for Log Analytics Workspace.')
+param logAnalyticsName string = 'project-mgmt-la-${uniqueString(resourceGroup().id)}'
+
+@description('Globally unique name for Application Insights.')
+param appInsightsName string = 'project-mgmt-insights-${uniqueString(resourceGroup().id)}'
+
 // ==========================================
 // SECURITY IDENTITIES (ENTRA ID / SECURITY FIRST)
 // ==========================================
@@ -27,6 +33,33 @@ param keyVaultName string = 'projmgmtvault-${uniqueString(resourceGroup().id)}'
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'proj-mgmt-identity'
   location: location
+}
+
+// ==========================================
+// OBSERVABILITY & LOGGING LAYER (NEW FOR DAY 10)
+// ==========================================
+
+// Log Analytics Workspace (Required for modern Workspace-based Application Insights)
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2021-12-01-preview' = {
+  name: logAnalyticsName
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
+
+// Application Insights Workspace
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalyticsWorkspace.id
+  }
 }
 
 // ==========================================
@@ -82,6 +115,11 @@ resource appService 'Microsoft.Web/sites@2022-03-01' = {
           name: 'AzureStorage__QueueName'
           value: 'exports'
         }
+        // 🔥 Day 10 Add: Linked dynamic connection string directly to avoid configuration override conflicts
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
+        }
       ]
     }
   }
@@ -136,6 +174,11 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
         {
           name: 'AzureStorage__blobServiceUri'
           value: 'https://${storage.name}.blob.core.windows.net/'
+        }
+        // 🔥 Day 10 Add: App Insights Connection String mapping for the Function runtime
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
         }
       ]
     }

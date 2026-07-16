@@ -3,10 +3,11 @@ using System;
 using System.Threading.Tasks;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging; // 🔥 Added for structured telemetry logging
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
-using Azure.Storage.Queues; // For the queue producer
+using Azure.Storage.Queues; 
 using backend.Infrastructure.Repositories;
 using backend.Models;
 
@@ -18,21 +19,27 @@ public class ExportController : ControllerBase
 {
     private readonly IExportRepository _exportRepository;
     private readonly BlobServiceClient _blobServiceClient;
-    private readonly IConfiguration _configuration;
+    private readonly QueueClient _queueClient; // 🔥 Injected our passwordless queue client directly
+    private readonly ILogger<ExportController> _logger; // 🔥 Added for Application Insights tracing
 
     public ExportController(
         IExportRepository exportRepository, 
         BlobServiceClient blobServiceClient,
-        IConfiguration configuration)
+        QueueClient queueClient, // 🔥 Dependency injection handles this now
+        ILogger<ExportController> logger) // 🔥 DI injects App Insights Logger automatically
     {
         _exportRepository = exportRepository;
         _blobServiceClient = blobServiceClient;
-        _configuration = configuration;
+        _queueClient = queueClient;
+        _logger = logger;
     }
 
     [HttpPost("request/{workspaceId}")]
     public async Task<IActionResult> RequestExport(string workspaceId, [FromBody] ExportRequestDto dto)
     {
+        // Day 10 Telemetry: Track the incoming business request
+        _logger.LogInformation("Initiating export request for Workspace {WorkspaceId}.", workspaceId);
+
         var job = new ExportJob
         {
             Id = Guid.NewGuid().ToString(),
@@ -43,23 +50,24 @@ public class ExportController : ControllerBase
 
         // 1. Save the job entry directly into your Always-Free Cosmos DB container
         await _exportRepository.CreateExportJobAsync(job);
+        _logger.LogInformation("Export job {JobId} successfully tracked in Cosmos DB with Pending status.", job.Id);
         
-        // 2. Push message to the background processing queue
+        // 2. Push message to the background processing queue using passwordless identity client
         try
         {
-            string connectionString = _configuration["AzureStorage:ConnectionString"];
-            string queueName = _configuration["AzureStorage:QueueName"];
-            
-            QueueClient queueClient = new QueueClient(connectionString, queueName);
-            await queueClient.CreateIfNotExistsAsync();
-
             var payload = new { JobId = job.Id, WorkspaceId = job.WorkspaceId };
             string messageText = JsonSerializer.Serialize(payload);
 
-            await queueClient.SendMessageAsync(messageText);
+            // Utilizing the injected queue client directly (No Connection Strings!)
+            await _queueClient.CreateIfNotExistsAsync();
+            await _queueClient.SendMessageAsync(messageText);
+
+            _logger.LogInformation("Export job {JobId} payload successfully published to Azure Storage Queue.", job.Id);
         }
         catch (Exception ex)
         {
+            // Day 10 Telemetry: Log the exception with full context to Application Insights
+            _logger.LogError(ex, "Cosmos DB tracking succeeded, but background queuing failed for Job {JobId}.", job.Id);
             return StatusCode(500, $"Job tracked in Cosmos DB, but background queueing failed: {ex.Message}");
         }
 
@@ -69,9 +77,12 @@ public class ExportController : ControllerBase
     [HttpGet("status/{jobId}")]
     public async Task<IActionResult> GetExportStatus(string jobId)
     {
+        _logger.LogInformation("Checking status of export job {JobId}.", jobId);
+
         var job = await _exportRepository.GetExportJobAsync(jobId);
         if (job == null)
         {
+            _logger.LogWarning("Export job status lookup failed: Job {JobId} not found.", jobId);
             return NotFound();
         }
 
@@ -81,14 +92,18 @@ public class ExportController : ControllerBase
     [HttpGet("download/{jobId}")]
     public async Task<IActionResult> GetDownloadUrl(string jobId)
     {
+        _logger.LogInformation("Generating SAS download link for completed export job {JobId}.", jobId);
+
         var job = await _exportRepository.GetExportJobAsync(jobId);
         if (job == null)
         {
+            _logger.LogWarning("SAS URL generation failed: Job {JobId} not found.", jobId);
             return NotFound();
         }
 
         if (job.Status != "Completed" || string.IsNullOrEmpty(job.BlobPath))
         {
+            _logger.LogWarning("SAS URL generation aborted: Job {JobId} is not in Completed state.", jobId);
             return BadRequest("Export job is not completed or file path is missing.");
         }
 
@@ -117,10 +132,13 @@ public class ExportController : ControllerBase
             
             var sasUri = blobClient.GenerateUserDelegationSasUri(sasBuilder, userDelegationKey);
 
+            _logger.LogInformation("Successfully generated secure User Delegation SAS URL for Job {JobId}.", jobId);
             return Ok(new { downloadUrl = sasUri.ToString() });
         }
         catch (Exception ex)
         {
+            // Day 10 Telemetry: Log the failure to key vault/user delegation APIs
+            _logger.LogError(ex, "Failed to generate User Delegation SAS URL for completed Job {JobId}.", jobId);
             return StatusCode(500, $"Internal server error generating download URL: {ex.Message}");
         }
     }

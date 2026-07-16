@@ -14,23 +14,25 @@ public class ProcessExportJob
     private readonly ILogger<ProcessExportJob> _logger;
     private readonly IExportRepository _exportRepository;
 
-    public ProcessExportJob(ILogger<ProcessExportJob> logger, IExportRepository _repo)
+    public ProcessExportJob(ILogger<ProcessExportJob> logger, IExportRepository repo)
     {
         _logger = logger;
-        _exportRepository = _repo;
+        _exportRepository = repo;
     }
 
     [Function(nameof(ProcessExportJob))]
-    public async Task Run([QueueTrigger("export-jobs", Connection = "AzureStorage")] QueueMessage message)
+    // 🔥 Aligned Queue trigger name to "exports" to match main.bicep and Web API configurations
+    public async Task Run([QueueTrigger("exports", Connection = "AzureStorage")] QueueMessage message)
     {
-        _logger.LogInformation("Processing export message ID: {id}", message.MessageId);
+        // Day 10 Telemetry: Track execution start with structured variables
+        _logger.LogInformation("Background execution triggered. Processing queue message ID: {MessageId}", message.MessageId);
 
         try
         {
             var payload = JsonSerializer.Deserialize<ExportQueueMessage>(message.MessageText);
             if (payload == null || string.IsNullOrEmpty(payload.JobId))
             {
-                _logger.LogError("Malformed queue payload received.");
+                _logger.LogError("Aborting process: Malformed queue payload received with message ID {MessageId}.", message.MessageId);
                 return;
             }
 
@@ -38,7 +40,7 @@ public class ProcessExportJob
             var job = await _exportRepository.GetExportJobAsync(payload.JobId);
             if (job == null)
             {
-                _logger.LogWarning("Export job document {JobId} missing from Cosmos DB.", payload.JobId);
+                _logger.LogWarning("Execution mismatch: Export job document {JobId} is missing from Cosmos DB.", payload.JobId);
                 return;
             }
 
@@ -46,7 +48,7 @@ public class ProcessExportJob
             job.Status = "Processing";
             await _exportRepository.UpdateExportJobAsync(job); 
 
-            _logger.LogInformation("Asynchronously processing data export for Workspace: {WorkspaceId}", job.WorkspaceId);
+            _logger.LogInformation("Job {JobId} status updated to 'Processing' for Workspace {WorkspaceId}.", job.Id, job.WorkspaceId);
 
             // 3. Mock processing delay (This will eventually query your tasks container and write a CSV stream)
             await Task.Delay(4000); 
@@ -57,11 +59,13 @@ public class ProcessExportJob
             job.BlobPath = mockBlobPath;
             await _exportRepository.UpdateExportJobAsync(job);
 
-            _logger.LogInformation("Export job {JobId} completely processed.", job.Id);
+            // Day 10 Telemetry: Record successful execution end-of-lifecycle
+            _logger.LogInformation("Job {JobId} completed successfully. Export generated at path: {BlobPath}", job.Id, job.BlobPath);
         }
         catch (Exception ex)
         {
-            _logger.LogError("Exception thrown inside background worker loop: {Message}", ex.Message);
+            // Day 10 Telemetry: Bubble the exception stack trace straight into App Insights dashboards
+            _logger.LogError(ex, "Uncaught exception thrown inside background worker loop for message ID {MessageId}.", message.MessageId);
             throw; 
         }
     }

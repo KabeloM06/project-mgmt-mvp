@@ -111,6 +111,12 @@ builder.Services.AddScoped<IExportRepository, ExportRepository>();
 builder.Services.AddControllers(); 
 builder.Services.AddOpenApi();
 
+// ============================================================================
+// DAY 10 APPLICATION INSIGHTS TELEMETRY REGISTRATION
+// ============================================================================
+// Automatically tracks incoming HTTP requests, unhandled exceptions, and outgoing dependencies
+builder.Services.AddApplicationInsightsTelemetry();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
