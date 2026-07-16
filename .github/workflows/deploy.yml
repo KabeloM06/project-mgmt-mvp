@@ -107,6 +107,8 @@ jobs:
         with:
           app-name: 'project-mgmt-api-gyvhzwhlex23g'
           package: './backend_publish'
+          app-settings: |
+            AllowedOrigins=https://project-mgmt-frontend-gyvhzwhlex23g.azurewebsites.net
 
       - name: Deploy Worker to Azure Function App
         uses: azure/functions-action@v1
