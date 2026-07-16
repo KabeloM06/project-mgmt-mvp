@@ -77,13 +77,20 @@ builder.Services.AddSingleton<Azure.Storage.Queues.QueueClient>(sp =>
 builder.Services.AddSingleton<JwtConfig>();
 
 // ============================================================================
-// DAY 7.5 PRODUCTION CORS POLICY REGISTRATION
+// DAY 9 PRODUCTION CORS POLICY REGISTRATION (DYNAMIC REFACTOR)
 // ============================================================================
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowProductionFrontend", policy =>
     {
-        policy.WithOrigins("https://project-mgmt-frontend-gyvhzwhlex23g.azurewebsites.net")
+        // Read from App Settings (comma-separated list), fallback to defaults if null
+        var configuredOrigins = builder.Configuration["AllowedOrigins"];
+        var origins = !string.IsNullOrEmpty(configuredOrigins)
+            ? configuredOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            : new[] { "https://project-mgmt-frontend-gyvhzwhlex23g.azurewebsites.net", 
+                        "http://localhost:4200" };
+
+        policy.WithOrigins(origins)
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
