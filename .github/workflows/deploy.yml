@@ -61,7 +61,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # We need the checkout step here too so the runner can read the main.bicep file!
       - name: Checkout Repository Configuration
         uses: actions/checkout@v4
 
@@ -96,7 +95,7 @@ jobs:
         with:
           subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
-          template: ./main.bicep  # 👈 Adjust path if main.bicep is inside an 'infra' subfolder
+          template: ./main.bicep
           failOnTargetValidationError: true
 
       # ==========================================
