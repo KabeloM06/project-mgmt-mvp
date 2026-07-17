@@ -36,7 +36,7 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' 
 }
 
 // ==========================================
-// OBSERVABILITY & LOGGING LAYER (NEW FOR DAY 10)
+// OBSERVABILITY & LOGGING LAYER
 // ==========================================
 
 // Log Analytics Workspace (Required for modern Workspace-based Application Insights)
@@ -115,7 +115,16 @@ resource appService 'Microsoft.Web/sites@2022-03-01' = {
           name: 'AzureStorage__QueueName'
           value: 'exports'
         }
-        // 🔥 Day 10 Add: Linked dynamic connection string directly to avoid configuration override conflicts
+        // Exposes blob endpoint so the Web API can talk to the Blob Client to request user delegation keys
+        {
+          name: 'AzureStorage__blobServiceUri'
+          value: 'https://${storage.name}.blob.core.windows.net/'
+        }
+        // Explicitly passes the identity's client ID for passwordless flows
+        {
+          name: 'AzureStorage__ClientId'
+          value: identity.properties.clientId
+        }
         {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: appInsights.properties.ConnectionString
@@ -146,7 +155,7 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: {
-      '${identity.id}': {} // 🔥 Assigns our Managed Identity to the Worker
+      '${identity.id}': {} // Assigns our Managed Identity to the Worker
     }
   }
   properties: {
@@ -167,7 +176,6 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
           value: cosmosDb.properties.documentEndpoint
         }
         {
-          // Passwordless connection structure using Identity for WebJobs
           name: 'AzureStorage__queueServiceUri'
           value: 'https://${storage.name}.queue.core.windows.net/'
         }
@@ -175,7 +183,11 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
           name: 'AzureStorage__blobServiceUri'
           value: 'https://${storage.name}.blob.core.windows.net/'
         }
-        // 🔥 Day 10 Add: App Insights Connection String mapping for the Function runtime
+        // Explicitly passes the identity's client ID so WebJobs can authenticate passwordless
+        {
+          name: 'AzureStorage__ClientId'
+          value: identity.properties.clientId
+        }
         {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: appInsights.properties.ConnectionString
@@ -272,12 +284,23 @@ resource roleAssignmentBlob 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
-// ADDED: Grants our Managed Identity "Storage Queue Data Processor" access to read/write from queues
+// Grants our Managed Identity "Storage Queue Data Processor" access to read/write from queues
 resource roleAssignmentQueue 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storage.id, 'queueProcessor', identity.id)
   scope: storage
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8a0f0c01-4e99-434c-9d83-18e3d0141c7b')
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ADDED: Grants our Managed Identity "Storage Blob Delegator" access to authorize User Delegation SAS Keys
+resource roleAssignmentBlobDelegator 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storage.id, 'blobDelegator', identity.id)
+  scope: storage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'db581a3e-3e11-4553-9b41-fb0cce10602a')
     principalId: identity.properties.principalId
     principalType: 'ServicePrincipal'
   }
