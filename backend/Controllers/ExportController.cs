@@ -127,6 +127,10 @@ public class ExportController : ControllerBase
             };
             sasBuilder.SetPermissions(BlobSasPermissions.Read);
 
+            // 🔥 Day 11 Security Upgrade: Force the browser to download the CSV as an attachment 
+            // rather than trying to open and render it in the browser window.
+            sasBuilder.ContentDisposition = $"attachment; filename=\"tasks_export_{DateTime.UtcNow:yyyyMMdd}.csv\"";
+
             var containerClient = _blobServiceClient.GetBlobContainerClient("exports");
             var blobClient = containerClient.GetBlobClient(job.BlobPath);
             
@@ -137,7 +141,6 @@ public class ExportController : ControllerBase
         }
         catch (Exception ex)
         {
-            // Day 10 Telemetry: Log the failure to key vault/user delegation APIs
             _logger.LogError(ex, "Failed to generate User Delegation SAS URL for completed Job {JobId}.", jobId);
             return StatusCode(500, $"Internal server error generating download URL: {ex.Message}");
         }
